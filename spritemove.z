@@ -1,0 +1,198 @@
+;
+; Name: spritemove.z
+; Description: Simple sprite movement
+;   Very rough Sprite move
+;
+; Author  : Andy johnson
+; Date    : 2020/08/28
+;
+; Version : 1.0
+
+; Model-I Calls
+include header.z
+
+
+	org	8000h		; Origin
+
+;Variables
+
+; Coordinates and SET() flag
+XCoord:	ds	1
+YCoord:	ds	1
+DrawSw: ds	1
+SetFlg:	ds	1
+XBuff:	ds	1
+YBuff:	ds	1
+
+; Sprite
+; ******
+;*  **  *
+;*  **  *
+; ******
+;
+Sprite:
+	db 126d,153d,153d,126d,4d,8d
+Clear:
+	db 0,0,0,0,4d,8d
+
+Init:
+	call	Cls		; Clear the screen
+	ld	a,0d
+	ld	(XCoord),a	; save X
+	ld	(Xbuff),a
+	ld	a,23d
+	ld	(YCoord), a	; save Y
+	ld	(YBuff),a	; save Y
+
+	ld	e,119	; Number of moves
+AnimLp:
+
+	ld	a,(XBuff)
+	ld	(XCoord),a
+	ld	a,(YBuff)
+	ld	(YCoord),a
+	ld	hl,Sprite
+	ld	ix,Sprite
+
+	push	bc
+	push	de
+
+	call	DrawSprite
+	call	DelayLp
+
+	pop	de
+	pop	bc
+
+
+	ld	a,(XBuff)
+	ld	(XCoord),a
+	ld	a,(YBuff)
+	ld	(YCoord),a
+	ld	hl,Clear
+	ld	ix,Clear
+
+	push	bc
+	push	de
+	call	DrawSprite
+	pop	de
+	pop	bc
+
+	ld	a,(XBuff)
+	inc	a
+	ld	(XBuff),a
+	dec	e
+	jp	nz,AnimLp
+	ret
+	
+;
+; Basically, we want to use a sprite that is
+; 8 bits wide and 4 lines deep
+; HL will be rotated and when there is a 1
+; in the carry flag, we will turn on that pixel
+; and when the carry flag is 0, we will just
+; go to the next spot.
+;
+; Example:
+; 01010101 = " * * * *"
+; 11111111 = "********"
+; 10101010 - "* * * * "
+;
+; Y=Start Position for Y
+; For D = 0 to (Height)
+;   X=Start Position for X
+;   For C = 0 to (Width)
+;     Rotate HL into Carry
+;       IF Carry Then Draw at X,y
+;       X = X + 1
+;   Next C
+    Y = Y + 1
+; Next D
+
+DrawSprite:
+
+	ld	d,(ix+4)	; Y=Start Position for Y
+	
+NextD:
+
+	ld	c,(ix+5)	; Load Width
+	ld	a,(XBuff)	; Load Starting X
+	ld	(XCoord),a	; Store Starting Coord
+NextC:
+	ld	a,0
+	; if (HL) = 0
+	rlc	(hl)		; roll to carry flag
+	jr	nc,Cont		; if HL=0 then inc a and HL
+	ld	a,1		; Turn on Draw
+Cont:
+	ld	(DrawSw),a
+	push	bc
+	push	de
+	push	hl
+	push	af
+
+	call	Grafix
+	
+	pop	af
+	pop	hl
+	pop	de
+	pop	bc
+
+	ld	a,(XCoord)	; load coord
+	inc	a		; increment
+	ld	(Xcoord),a	; and store
+	dec	c		; decrement C
+	ld	a,0		; If C>0 Next C
+	or	c
+	jr	nz,NextC
+	ld	a,(YCoord)	; If c=0 Next D
+	inc	a
+	ld	(YCoord),a	
+	inc	hl
+	dec	d
+	ld	a,0
+	or	d
+	jr	nz, NextD
+	ret
+
+; Uses SET/RESET to draw based on SET FLAG
+Grafix:
+	ld	a,(DrawSw)
+	or	a
+	jr	nz,TurnOn
+	ld	a,SetOff
+	jr	DrawIt
+TurnOn:
+	ld	a,SetOn		; show the pixel
+DrawIt:
+	ld	(SetFlg),a	; SET() is on
+	ld	a,(SetFlg)	; Set the SET() flag
+	ld	h,a		; Store in H for SET routine
+	ld	a,(XCoord)	; Set X
+	ld	b,a
+	ld	a,(YCoord)	; Set Y
+
+	; Push these before call (Required by SET)
+	push	hl
+	push	bc
+
+	; Use SET/RESET. HL and BC are parameters
+	ld	hl,SetEnd
+	jp	SetCall
+
+	; Turn set off
+	ld	a,SetOff	; Hide the pixel
+	ld	(SetFlg),a	; SET() is off
+	ret
+
+DelayLp:
+	; Delay
+	ld	b,10d
+	ld	d,10d
+WaitLp:
+	djnz	WaitLp
+	dec	d
+	jp	nz,WaitLp
+	ret
+
+; End of line
+	end Init
